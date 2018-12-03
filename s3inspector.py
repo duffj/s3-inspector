@@ -158,70 +158,77 @@ def analyze_buckets(s3, s3_client, report_path=None):
     :param report_path: Path to lambda report file.
     """
     buckets = s3.buckets.all()
-    try:
-        bucketcount = 0
+    bucketcount = 0
+    errorcount = 0
 
-        for bucket in buckets:
+    for bucket in buckets:
+        add_to_output(SEP, report_path)
+        bucket_name = bucket.name
+        if not report_path:
+            bucket_name = termcolor.colored(bucket.name, "blue", attrs=["bold"])
+        add_to_output(f"Trying bucket: {bucket_name}...", report_path)
+        try:
             location = get_location(bucket.name, s3_client)
-            add_to_output(SEP, report_path)
             bucket_acl = bucket.Acl()
             public, grants = check_acl(bucket_acl)
-
-            if public:
-                if report_path:
-                    msg = "Bucket {}: {}".format(bucket.name, "PUBLIC!")
-                else:
-                    bucket_line = termcolor.colored(
-                            bucket.name, "blue", attrs=["bold"])
-                    public_ind = termcolor.colored(
-                            "PUBLIC!", "red", attrs=["bold"])
-                    msg = "Bucket {}: {}".format(
-                            bucket_line, public_ind)
-                add_to_output(msg, report_path)
-                add_to_output("Location: {}".format(location), report_path)
-
-                if grants:
-                    for grant in grants:
-                        permissions = grants[grant]
-                        perm_to_print = [EXPLAINED[perm]
-                                         for perm in permissions]
-                        if report_path:
-                            msg = "Permission: {} by {}".format(" & ".join(perm_to_print),
-                                                                (GROUPS_TO_CHECK[grant]))
-                        else:
-                            msg = "Permission: {} by {}".format(
-                                    termcolor.colored(
-                                            " & ".join(perm_to_print), "red"),
-                                    termcolor.colored(GROUPS_TO_CHECK[grant], "red"))
-                        add_to_output(msg, report_path)
-                urls = scan_bucket_urls(bucket.name)
-                add_to_output("URLs:", report_path)
-                if urls:
-                    add_to_output("\n".join(urls), report_path)
-                else:
-                    add_to_output("Nothing found", report_path)
-            else:
-                if report_path:
-                    msg = "Bucket {}: {}".format(bucket.name, "Not public")
-                else:
-                    bucket_line = termcolor.colored(
-                            bucket.name, "blue", attrs=["bold"])
-                    public_ind = termcolor.colored(
-                            "Not public", "green", attrs=["bold"])
-                    msg = "Bucket {}: {}".format(
-                            bucket_line, public_ind)
-                add_to_output(msg, report_path)
-                add_to_output("Location: {}".format(location), report_path)
-            bucketcount += 1
-        if not bucketcount:
-            add_to_output("No buckets found", report_path)
+        except botocore.exceptions.ClientError as e:
+            errorcount += 1
+            resolve_exception(e, report_path)
+            continue
+        if public:
             if report_path:
-                msg = "You are safe"
+                msg = "Bucket {}: {}".format(bucket.name, "PUBLIC!")
             else:
-                msg = termcolor.colored("You are safe", "green")
+                bucket_line = termcolor.colored(bucket.name, "blue", attrs=["bold"])
+                public_ind = termcolor.colored("PUBLIC!", "red", attrs=["bold"])
+                msg = "Bucket {}: {}".format(bucket_line, public_ind)
             add_to_output(msg, report_path)
-    except botocore.exceptions.ClientError as e:
-        resolve_exception(e, report_path)
+            add_to_output("Location: {}".format(location), report_path)
+
+            if grants:
+                for grant in grants:
+                    permissions = grants[grant]
+                    perm_to_print = [EXPLAINED[perm]
+                                    for perm in permissions]
+                    if report_path:
+                        msg = "Permission: {} by {}".format(" & ".join(perm_to_print),
+                                                            (GROUPS_TO_CHECK[grant]))
+                    else:
+                        msg = "Permission: {} by {}".format(
+                                termcolor.colored(
+                                        " & ".join(perm_to_print), "red"),
+                                termcolor.colored(GROUPS_TO_CHECK[grant], "red"))
+                    add_to_output(msg, report_path)
+            urls = scan_bucket_urls(bucket.name)
+            add_to_output("URLs:", report_path)
+            if urls:
+                add_to_output("\n".join(urls), report_path)
+            else:
+                add_to_output("Nothing found", report_path)
+        else:
+            if report_path:
+                msg = "Bucket {}: {}".format(bucket.name, "Not public")
+            else:
+                bucket_line = termcolor.colored(
+                        bucket.name, "blue", attrs=["bold"])
+                public_ind = termcolor.colored(
+                        "Not public", "green", attrs=["bold"])
+                msg = "Bucket {}: {}".format(
+                        bucket_line, public_ind)
+            add_to_output(msg, report_path)
+            add_to_output("Location: {}".format(location), report_path)
+        bucketcount += 1
+    add_to_output(SEP, report_path)
+    add_to_output(SEP, report_path)
+    if not bucketcount:
+        add_to_output("No buckets found", report_path)
+        if report_path:
+            msg = "You are safe"
+        else:
+            msg = termcolor.colored("You are safe", "green")
+        add_to_output(msg, report_path)
+    if errorcount > 0:
+        add_to_output(f"Error accessing {errorcount} buckets", report_path)
 
 
 def lambda_handler(event, context):
