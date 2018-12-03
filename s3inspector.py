@@ -1,5 +1,10 @@
+import boto3
+import botocore
 import os
+import pip
 import re
+import requests
+import termcolor
 import sys
 import warnings
 
@@ -36,19 +41,27 @@ def get_s3_obj(is_lambda=False):
         s3 = boto3.resource("s3")
         s3_client = boto3.client("s3")
     else:
-        if os.path.exists(os.path.join(expanduser("~"), ".aws", "credentials")) or os.path.exists(
-                os.path.join(expanduser("~"), ".aws", "config")):
-            profile_name = raw_input("Enter your AWS profile name [default]: ") or "default"
-            session = boto3.Session(profile_name=profile_name)
-            s3 = session.resource("s3")
-            s3_client = session.client("s3")
+        access_key = os.getenv("AWS_ACCESS_KEY_ID", None)
+        secret_key = os.getenv("AWS_SECRET_ACCESS_KEY", None)
+        if access_key is None or secret_key is None:
+            if os.path.exists(os.path.join(expanduser("~"), ".aws", "credentials")) or os.path.exists(
+                    os.path.join(expanduser("~"), ".aws", "config")):
+                profile_name = input("Enter your AWS profile name [default]: ") or "default"
+                session = boto3.Session(profile_name=profile_name)
+                s3 = session.resource("s3")
+                s3_client = session.client("s3")
+            else:
+                access_key = input("Enter your AWS access key ID: ")
+                secret_key = input("Enter your AWS secret key: ")
+                s3 = boto3.resource("s3", aws_access_key_id=access_key,
+                                    aws_secret_access_key=secret_key)
+                s3_client = boto3.client("s3", aws_access_key_id=access_key,
+                                        aws_secret_access_key=secret_key)
         else:
-            access_key = raw_input("Enter your AWS access key ID: ")
-            secret_key = raw_input("Enter your AWS secret key: ")
             s3 = boto3.resource("s3", aws_access_key_id=access_key,
                                 aws_secret_access_key=secret_key)
             s3_client = boto3.client("s3", aws_access_key_id=access_key,
-                                     aws_secret_access_key=secret_key)
+                                    aws_secret_access_key=secret_key)
     return s3, s3_client
 
 
@@ -93,22 +106,6 @@ def get_location(bucket_name, s3_client):
     if loc is None:
         loc = "None(probably Northern Virginia)"
     return loc
-
-
-def install_and_import(pkg):
-    """
-    Installs latest versions of required packages.
-
-    :param pkg: Package name.
-    """
-    import importlib
-    try:
-        importlib.import_module(pkg)
-    except ImportError:
-        import pip
-        pip.main(["install", pkg])
-    finally:
-        globals()[pkg] = importlib.import_module(pkg)
 
 
 def scan_bucket_urls(bucket_name):
@@ -322,15 +319,9 @@ If you didn't enable it(when you created the account), then:
 
 
 def main():
-    if sys.version[0] == "3":
-        raw_input = input
-    packages = ["boto3", "botocore", "termcolor", "requests"]
-    for package in packages:
-        install_and_import(package)
     s3, s3_client = get_s3_obj()
     analyze_buckets(s3, s3_client)
 
 
 if __name__ == "__main__":
     main()
-

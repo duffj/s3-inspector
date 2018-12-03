@@ -1,0 +1,15 @@
+version: '3'
+services:
+  inspector:
+    build: .
+    container_name: inspector
+    entrypoint:
+    - python
+    - ./s3inspector.py
+    environment:
+    - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+    - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+    image: python:3
+    volumes:
+    - .:/usr/src/app
+    working_dir: /usr/src/app
